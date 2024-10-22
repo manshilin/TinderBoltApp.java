@@ -14,9 +14,12 @@ import java.util.ArrayList;
 public class TinderBoltApp extends MultiSessionTelegramBot {
     public static final String TELEGRAM_BOT_NAME = "my_telegramtinder_bot"; 
     public static final String TELEGRAM_BOT_TOKEN = "8138281864:AAE9qULm0sisyF2Ojbs-3PdNFgA22ollFN8"; 
-    public static final String OPEN_AI_TOKEN = "gpt:"; 
+    public static final String OPEN_AI_TOKEN = "gpt:T0iTZNHd48ZlWS64y3EfJFkblB3TMr4vkS5kVmutmQNPEEps"; 
     public DialogMode mode = DialogMode.MAIN;
     private ArrayList<String> chat;
+    private UserInfo myInfo;
+    private UserInfo personInfo;
+    private int questionNumber;
 
     public ChatGPTService gptService = new ChatGPTService(OPEN_AI_TOKEN);
 
@@ -28,102 +31,182 @@ public class TinderBoltApp extends MultiSessionTelegramBot {
     public void onUpdateEventReceived(Update update) {
         String message = getMessageText();
 
-        if (message.equals("/start")) {
-            mode = DialogMode.MAIN;
-            showMainMenu(
+        switch (message) {
+            case "/start" -> {
+                mode = DialogMode.MAIN;
+
+                showMainMenu(
+                    
                 "Main menu", "/start",
                 "генерація Tinder-профілю 😎", "/profile",
-                
                  "повідомлення для знайомства 🥰", "/opener",
                 "листування від вашого імені 😈", "/message",
                 "листування із зірками 🔥", "/date",
                 "поставити запитання чату GPT 🧠", "/gpt"
+                );
 
-            );
-            String menu = loadMessage("main");
-            sendTextMessage(menu);
-            sendPhotoMessage("main");
+                sendPhotoMessage( "main");
+                String menu = loadMessage("main");
+                sendTextMessage(menu);
+                return;
+            }
+            
+            case "/gpt" -> {
+                mode = DialogMode.GPT;
 
-            return;
+                sendPhotoMessage( "gpt");
+                String gptMessage = loadMessage("gpt");
+                sendTextMessage(gptMessage);
+                return;
+            }
+
+            case "/date" -> {
+                mode = DialogMode.DATE;
+
+                sendPhotoMessage("date");
+                String dateMessage = loadMessage("date");
+                sendTextButtonsMessage(dateMessage, 
+                "Ariana Grande","date_grande",
+                "Margot Robbie ","date_robbie",
+                "Zendaya ","date_zendaya",
+                "Ryan Gosling ","date_gosling",
+                "Tom Hardy ","date_hardy"); 
+                return;
+            }
+
+            case "/message" -> {
+                mode = DialogMode.MESSAGE;
+                sendPhotoMessage("message");
+                String gptMessageHelper = loadMessage("message");
+                sendTextButtonsMessage(gptMessageHelper,
+                "Next", "message_next",
+                "invite to a date", "message_date");
+
+                chat = new ArrayList<>();
+                return;
+            }
+            case "/profile" -> {
+                mode = DialogMode.PROFILE;
+                sendPhotoMessage("profile");
+                String profileMessage = loadMessage("profile");
+                sendTextMessage(profileMessage);
+
+                myInfo = new UserInfo();
+                questionNumber = 1;
+                sendTextMessage("Input name?");
+                return;
+            }
+            case "/opener" -> {
+                mode = DialogMode.OPENER;
+                sendPhotoMessage("opener");
+                String profileMessage = loadMessage("opener");
+                sendTextMessage(profileMessage);
+
+                personInfo = new UserInfo();
+                questionNumber = 1;
+                sendTextMessage("Input name?");
+                return;
+            }
         }
-        
-        if (message.equals("/gpt")) {
-            mode = DialogMode.GPT;
 
-            String gptMessage = loadMessage("gpt");
-            sendTextMessage(gptMessage);
-            sendPhotoMessage("gpt");
+        switch (mode) {
+            case MAIN -> {
+                // Дії для MAIN (поки що порожньо)
+            }
+            
+            case GPT -> {
+                // Дії для GPT
+                String prompt = loadPrompt("gpt");
+                Message msg = sendTextMessage("ChatGPT print...");
+                String answer = gptService.sendMessage(prompt, message);
+                updateTextMessage(msg, answer);
+            }
+            case DATE -> {
+                // Дії для DATE
+                String query = getCallbackQueryButtonKey();
+                if (query.startsWith("date_")) {
+                    sendPhotoMessage(query);
+                    String prompt = loadPrompt(query);
+                    gptService.setPrompt(prompt);
+                }
+            }
+            case MESSAGE -> {
+                // Дії для MESSAGE
+                String query = getCallbackQueryButtonKey();
 
-            return;
+                if (query.startsWith("message_")) {
+                    String prompt = loadPrompt(query);
+                    String history = String.join("\n", chat);
+
+                    Message msg = sendTextButtonsMessage("ChatGPT print ...");
+
+                    String answer = gptService.sendMessage(prompt, history);
+                    updateTextMessage(msg, answer);
+                }
+                chat.add(message);
+            }
+            case PROFILE -> {
+                if (questionNumber <= 6) {
+                    askQuestion(message, myInfo, "profile");
+                }
+            } 
+
+            case OPENER -> {
+                if (questionNumber <= 6) {
+                    askQuestion(message, personInfo,  "opener");
+                }
+            }
         }
-        if (mode == DialogMode.GPT) {
-            String promt = loadPrompt("gpt");
-            Message msg = sendTextMessage("Wait");
-            String answer = gptService.sendMessage(promt, message);
-            updateTextMessage(msg, answer);
-            return;
+    }        
+    private void askQuestion(String message, UserInfo user, String profileName){
+        switch (questionNumber) {
+            case 1 -> {
+                user.name = message;
+                questionNumber = 2;
+                sendTextMessage("Input age");
+                return;
 
-        }
-        if (message.equals("/date")) {
-            mode = DialogMode.DATE;
+            }
+            case 2 -> {
+                user.age = message;
+                questionNumber = 3;
+                sendTextMessage("Input city?");
 
-            String dateMessage = loadMessage("date");
-            sendPhotoMessage("date");
+                return;
+            }
 
-            sendTextButtonsMessage(dateMessage, 
-            "Ariana Grande","date_grande",
-            "Margot Robbie ","date_robbie",
-            "Zendaya ","date_zendaya",
-            "Ryan Gosling ","date_gosling",
-            "Tom Hardy ","date_hardy");
+            case 3 -> {
+                user.city = message;
+                questionNumber = 4;
+                sendTextMessage("Input profession?");
 
-            return;
-        }
+                return;
+            }
+            case 4 -> {
+                user.occupation = message;
+                questionNumber = 5;
+                sendTextMessage("Input hobby?");
 
-        if (mode == DialogMode.DATE) {
-            String query = getCallbackQueryButtonKey();
+                return;
+            }
 
-            if (query.startsWith("date_")) {
-                sendPhotoMessage(query);
-                String promt = loadPrompt(query);
-                gptService.setPrompt(promt);
+            case 5 -> {
+                user.hobby = message;
+                questionNumber = 6;
+                sendTextMessage("Input goals?");
                 
                 return;
             }
-            Message msg = sendTextMessage("Wait");
-            String answer = gptService.addMessage(message);
-            updateTextMessage(msg, answer);
-            return;
-        }
-        if (message.equals("/message")) {
-            mode = DialogMode.MESSAGE;
-            sendPhotoMessage("message");
-            String gptMessageHelper = loadMessage("message");
-            sendTextMessage(gptMessageHelper);
+            case 6 -> {
+                user.goals = message;
 
-            sendTextButtonsMessage(gptMessageHelper,
-             "message next","message_next",
-             "invite on a date", "message_date");
-            
-            chat = new ArrayList<>();
-
-            return;
-        }
-
-        if(mode == DialogMode.MESSAGE) {
-            String query = getCallbackQueryButtonKey();
-            if (query.startsWith("message_")) {
-                String promt = loadPrompt(query);
-                String history = String.join("\n\n", chat);
-
-                Message msg = sendTextMessage("Wait");
-
-                String answer = gptService.sendMessage(promt, history);
+                String promt = loadPrompt( "profileName");
+                Message msg = sendTextMessage("ChatGPT print...");
+                String answer = gptService.sendMessage(promt, user.toString());
                 updateTextMessage(msg, answer);
-                sendTextMessage(answer);
+                
+                return;
             }
-            chat.add(message);
-            return;
         }
     }
     public static void main(String[] args) throws TelegramApiException {
